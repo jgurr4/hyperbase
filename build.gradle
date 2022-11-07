@@ -1,0 +1,43 @@
+plugins {
+    id 'java'
+}
+
+group 'org.example'
+version '1.0-SNAPSHOT'
+
+ext {
+    vertxVersion = '4.3.4'
+    junitJupiterEngineVersion = '5.8.2'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+//    implementation "org.ple:immutable-collections"
+//    implementation "org.ple:observability-bridge"
+//    implementation "org.ple:jerbil"
+//  implementation 'io.vertx:vertx-stack:4.3.2'
+    implementation "io.vertx:vertx-rx-java3:$vertxVersion"
+    implementation "io.vertx:vertx-shell:$vertxVersion"
+    implementation "io.vertx:vertx-unit:$vertxVersion"
+    implementation "io.vertx:vertx-web:$vertxVersion"
+    implementation "io.vertx:vertx-service-proxy:$vertxVersion"
+    implementation "io.vertx:vertx-sockjs-service-proxy:$vertxVersion"
+    implementation "ch.qos.logback:logback-classic:1.2.11"
+
+    testImplementation "io.vertx:vertx-junit5:$vertxVersion"
+    testImplementation "org.junit.jupiter:junit-jupiter-api:$junitJupiterEngineVersion"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$junitJupiterEngineVersion"
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_16
+    targetCompatibility = JavaVersion.VERSION_16
+}
+
+
+test {
+    useJUnitPlatform()
+}

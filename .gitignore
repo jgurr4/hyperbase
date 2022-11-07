@@ -1,0 +1,8 @@
+.idea
+.swo
+.swp
+.class
+.gradle
+/build/
+.jar
+.war

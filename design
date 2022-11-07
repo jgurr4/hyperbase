@@ -1,0 +1,49 @@
+Hyperbase is the first component we must finish for visur
+
+Merging of the idea of application and database, and query engine into a single package. Splunk does the same thing.
+
+CREATE, MODIFY and DELETE
+Keeps the previous versions, never deletes things or modifies
+
+Written in Java/vertx. Later we'll use VISUR to write it in Q/lemon
+
+Every record has event type (create modify delete), record type (noun (table)), id
+
+writing is super fast every database is 1 single file with sequential data. 
+Files get memory mapped, if it gets too big then it gets broken up. If you have 1gb of ram and 8gb file this works well, because it loads chunks of the file into memory, to check if the current chunk contains the thing you're looking for. not the entire file.
+Reading is the slowest process because this style favors writing, but it's made up for by the automated index and caching. 
+No one will design any indexes, because it's all automatic based on what you use. Warming up data is a concept here.
+
+git and prometheus are also storing a history. it stores all data across all time. Allows you to time travel and repeat events to find out what went wrong.
+you can delete any part of the history you want. You can have automatic garbage collection which deletes history past 3 weeks if you want. Or you can wipe out all the history and preserve only the current state and future history.
+The way garbage collectioni works is it looks for all modifies and delete and removes them as well as past thing they operated on, and keep only the latest version. turning some deletes and modifies into creates for the new database. Then you point users to the new database when it's ready.
+
+The second part of it is http/server part. 
+The third part is the backend version of visur
+The fourth part is the web version of visur and then the cli version (maybe work on this in parallel)
+
+The first record you make you must provide a type, then it creates a table of that type auto
+first table is type 0 which all tables go inside
+type ids exist
+
+You wouldn't have to add logging tracing or metrics because all this data is stored for free 
+all the records have timestamps in between.
+indexes have summaries and they have event ids also
+also summaries are inside indexes
+
+event ids as well
+you also have the benefit of having an omnicient debugger because we have a history of all things
+but omnicient debugger will not work on low level stuff without additional program. we might have it as an option when you run your hyperbase application
+
+
+Jerbil will still be nice for when I'm forced to use java and other languages. 
+
+
+Database:
+ - file manager (create and delete files and work with memory mapping files, decide where to store the actual files whether on disk or in memory, automatic backup system) 
+     - It's gonna need to decide on a per-system basis where to store files, if it's linux then it will store files in a folder like /etc/visur_data/ or something like that.
+ - query engine (Automatically generates queries for the user which communicates with file manager to create/delete files and records from files, this is java communicating with base machine to generate files)
+ - cacher (handles creating indexes automatically based on what is used most, communicates with file manager to obtain index data to store in memory based on the queries that get used from the query engine)
+ - StoreType (ENUM determines whether data is stored entirely in memory, or indexes only, or if data goes to blackhole entirely)
+ - (TBD) Event Coordinator (If enabled this scrapes the database files once every 60 seconds and presents it in a format readable for certain observability components like prometheus, jaeger, and splunk etc..., kinda like a exporter) (NOTE: Ask jerm about this, because this would effectively double the storage usage of apps maybe instead of this we can just make our own observability interface that can read our database format without needing a conversion in between.)
+ - (TBD) Generic Observability Interface (A generic interface that collects metrics, logs and traces by reading our database files directly and sending the data to a web UI for monitoring purposes and visualization)
