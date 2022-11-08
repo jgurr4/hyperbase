@@ -47,3 +47,10 @@ Database:
  - StoreType (ENUM determines whether data is stored entirely in memory, or indexes only, or if data goes to blackhole entirely)
  - (TBD) Event Coordinator (If enabled this scrapes the database files once every 60 seconds and presents it in a format readable for certain observability components like prometheus, jaeger, and splunk etc..., kinda like a exporter) (NOTE: Ask jerm about this, because this would effectively double the storage usage of apps maybe instead of this we can just make our own observability interface that can read our database format without needing a conversion in between.)
  - (TBD) Generic Observability Interface (A generic interface that collects metrics, logs and traces by reading our database files directly and sending the data to a web UI for monitoring purposes and visualization)
+
+
+Application situations: One action = one type affected and one CRUD operation.
+Social media -> Delete all Users from admin  -> Query Factory generates a Query -> Record Maker converts query into formatted list of delete records -> File manager validates and appends that list to the "admin" database 
+VISUR -> Delete all files ending in .txt -> action is performed by terminal since this part is using the terminal multiplexer part of VISUR.
+DB Interface -> Update all records that match "[0-9].*" else delete -> Record Maker validates all existing metrics and creates 'delete all except modify records list' sends immediately to File manager -> File manager validates and appends the modifies and deletes to the database.
+

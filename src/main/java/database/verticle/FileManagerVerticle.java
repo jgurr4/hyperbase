@@ -31,12 +31,14 @@ public class FileManagerVerticle extends AbstractVerticle {
     //NOTE: MappedByteBuffer and file mapping remain valid until the garbage is collected. sun.misc.Cleaner is probably
     // the only option available to clear memory-mapped files. see https://www.geeksforgeeks.org/what-is-memory-mapped-file-in-java/
     // This is the most complicated operation on this page.
-    // This part is more complex, because the query engine will send you a string of text to match against, it will either
-    // be regex or normal string of records to look for. For example, if the query was 'select * from person where person-id > 5'
+    // because the Record Maker will send you a string of text to match against, it will either
+    // be regex or normal string of record values to look for. For example, if the query was 'select * from person where id > 5'
     // Then the type would be person and the text to match would be 'person-id: ^[6-9][0-9]*\d$'
     // Basically that will grep the file for any person records > 5. Of course it won't parse the entire database file unless it has to.
+    // Another example: select * from person where name = 'john', age = 5; would search for all records with "name: john" and "age: 5"
     // That is where the more complex stuff comes in, it will check its cache to find out all the possible buckets it will need to load
     // Then it will memory map through each bucket one at a time and pull all the records from each one that match the regex condition
+    // It will return a list of ReadRecords in the reply.
     private void handleReadRecord(Message message) {
         final EventBus eb = vertx.eventBus();
         LOGGER.debug("FileManagerVerticle got request to read record");
@@ -66,38 +68,118 @@ public class FileManagerVerticle extends AbstractVerticle {
         message.reply();
     }
 
-    // NOTE: consider using bufferedWriter instead. See https://www.digitalocean.com/community/tutorials/java-write-to-file
+    // See https://www.digitalocean.com/community/tutorials/java-write-to-file
+    // This method works like this:
+    // First, the Record factory converts a query into a list of records that are formatted correctly beforehand.
+    // Then this method must take that pre-formatted list of records and validate that none of them already exist.
+    // any that do exist are removed from the list, the rest are appended to the end of the
+    // correct database file type
     private void handleCreateRecord(Message message) {
         LOGGER.debug("FileManagerVerticle got request to create record");
-        final JsonObject messageJson = JsonObject.mapFrom(message.body());
-        final String text = messageJson.getString("record");
-        final String type = messageJson.getString("type");
+        final JsonObject jsonMsg = JsonObject.mapFrom(message.body());
+        final String[] records = jsonMsg.getString("records").split("\n");
+        final String type = jsonMsg.getString("type");
         try {
             File db = new File("/etc/" + type);
-            FileWriter fr = new FileWriter(db);
+            FileWriter fw = new FileWriter(db);
+            BufferedWriter bw = new BufferedWriter(fw);
             if (db.createNewFile()) {
                 db.setReadable(true);
                 db.setWritable(true);
-                System.out.println("File created: " + db.getName());
+                LOGGER.debug("File created: " + db.getName());
             } else {
-                System.out.println("File already exists.");
-                fr.append(text);
+                LOGGER.debug("File already exists.");
             }
+            for (int i = 0; i < records.length; i++) {
+                if (!recordExists(records[i], type)) {
+                    bw.append(records[i]);
+                } else {
+                    LOGGER.debug("record: `" + records[i] + "` already exists in " + type + " database file");
+                }
+            }
+            bw.close();
+            fw.close();
         } catch (IOException e) {
-            System.out.println("An error occurred.");
+            LOGGER.debug("An error occurred.");
             e.printStackTrace();
         }
     }
 
+    // This method works like this:
+    // First the Record Maker converts a query into a formatted list of modify records and sends it here.
+    // Then this method checks to make sure the records all exist, any that don't exist are taken off the list.
+    // Then the remaining list is appended into the type file, and the reply message will contain the result and
+    // include any warnings if debug mode is on.
     private void handleModifyRecord(Message message) {
         LOGGER.debug("FileManagerVerticle got request to modify record");
+        final JsonObject jsonMsg = JsonObject.mapFrom(message.body());
+        final String[] records = jsonMsg.getString("records").split("\n");
+        final String type = jsonMsg.getString("type");
+        try {
+            File db = new File("/etc/" + type);
+            FileWriter fw = new FileWriter(db);
+            BufferedWriter bw = new BufferedWriter(fw);
+            if (db.createNewFile()) {
+                db.setReadable(true);
+                db.setWritable(true);
+                LOGGER.debug("File created: " + db.getName());
+            } else {
+                LOGGER.debug("File already exists.");
+            }
+            for (int i = 0; i < records.length; i++) {
+                if (recordExists(records[i], type)) {
+                    bw.append(records[i]);
+                } else {
+                    LOGGER.debug("record: `" + records[i] + "` already exists in " + type + " database file");
+                }
+            }
+            bw.close();
+            fw.close();
+        } catch (IOException e) {
+            LOGGER.debug("An error occurred.");
+            e.printStackTrace();
+        }
     }
 
+    // This method works like this:
+    // First the Query engine converts a query into a formatted list of delete records and sends them here.
+    // Then this method checks to make sure the records all exist, any that don't exist are removed from the
+    // list, then the reply message will notify of all records that didn't exist if debug mode is on.
     private void handleDeleteRecord(Message message) {
         LOGGER.debug("FileManagerVerticle got request to delete record");
-        final JsonObject messageJson = JsonObject.mapFrom(message.body());
-        final char[] text = messageJson.getString("record").toCharArray();
-        final String type = messageJson.getString("type");
+        final JsonObject jsonMsg = JsonObject.mapFrom(message.body());
+        final String[] records = jsonMsg.getString("records").split("\n");
+        final String type = jsonMsg.getString("type");
+        try {
+            File db = new File("/etc/" + type);
+            FileWriter fw = new FileWriter(db);
+            BufferedWriter bw = new BufferedWriter(fw);
+            if (db.createNewFile()) {
+                db.setReadable(true);
+                db.setWritable(true);
+                LOGGER.debug("File created: " + db.getName());
+            } else {
+                LOGGER.debug("File already exists.");
+            }
+            for (int i = 0; i < records.length; i++) {
+                if (recordExists(records[i], type)) {
+                    bw.append(records[i]);
+                } else {
+                    LOGGER.debug("record: `" + records[i] + "` already exists in " + type + " database file");
+                }
+            }
+            bw.close();
+            fw.close();
+        } catch (IOException e) {
+            LOGGER.debug("An error occurred.");
+            e.printStackTrace();
+        }
+    }
+
+    // This method communicates with cacherVerticle to check the indexes of the database file for the record to
+    // validate if it exists. If it doesn't exist, then this returns false.
+    private boolean recordExists(String record, String type) {
+        char[] text = record.toCharArray();
         try (RandomAccessFile sc = new RandomAccessFile(type, "rw")) {
             // Mapping the file with the memory
             // Here the out is the object
@@ -127,6 +209,7 @@ public class FileManagerVerticle extends AbstractVerticle {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        return false;
     }
 
 }
