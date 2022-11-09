@@ -1,5 +1,8 @@
 package database.verticle;
 
+import com.ple.util.IArrayList;
+import database.record.*;
+import database.record.Record;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Single;
 import io.vertx.core.json.JsonObject;
@@ -23,8 +26,9 @@ public class FileManagerVerticle extends AbstractVerticle {
     public Completable rxStart() {
         vertx.eventBus().consumer(createRecord.name(), this::handleCreateRecord);
         vertx.eventBus().consumer(readRecord.name(), this::handleReadRecord);
-        vertx.eventBus().consumer(modifyRecord.name(), this::handleModifyRecord);
-        vertx.eventBus().consumer(deleteRecord.name(), this::handleDeleteRecord);
+        vertx.eventBus().consumer(recordExists.name(), this::recordExists);
+//        vertx.eventBus().consumer(modifyRecord.name(), this::handleModifyRecord);
+//        vertx.eventBus().consumer(deleteRecord.name(), this::handleDeleteRecord);
         return Completable.complete();
     }
 
@@ -40,17 +44,23 @@ public class FileManagerVerticle extends AbstractVerticle {
     // Then it will memory map through each bucket one at a time and pull all the records from each one that match the regex condition
     // It will return a list of ReadRecords in the reply.
     private void handleReadRecord(Message message) {
-        final EventBus eb = vertx.eventBus();
         LOGGER.debug("FileManagerVerticle got request to read record");
         final JsonObject messageJson = JsonObject.mapFrom(message.body());
         final JsonObject jsonReply = new JsonObject();
         final String regex = messageJson.getString("regex");
         final String type = messageJson.getString("type");
-        final Single<String> indexes = eb.rxRequest(getMatchedIndexes.name(), regex).map(e -> e.body().toString());
+        IArrayList<Record> records = readRecordsFromDatabase(type, regex);
+        message.reply(records);
+        message.fail(500, "Failed to read records from file");
+    }
+
+    public IArrayList<Record> readRecordsFromDatabase(String filename, String filter) {
+        EventBus eb = vertx.eventBus();
+        final Single<String> indexes = eb.rxRequest(getMatchedIndexes.name(), filter).map(e -> e.body().toString());
         // Everything below is subject to change. Here we need to pull up every matched index from the main database file
         // one by one and load into memory to extract all the matched records inside them. Then we can return that
         // string of records in the eventbus reply.
-        try (RandomAccessFile sc = new RandomAccessFile(type, "rw")) {
+        try (RandomAccessFile sc = new RandomAccessFile(filename, "rw")) {
             MappedByteBuffer out = sc.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, 10);
             for (int i = 0; i < text.length; i++) {
                 LOGGER.debug(String.valueOf((out.put((byte) text[i]))));
@@ -65,19 +75,19 @@ public class FileManagerVerticle extends AbstractVerticle {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        message.reply();
     }
 
     // See https://www.digitalocean.com/community/tutorials/java-write-to-file
     // This method works like this:
-    // First, the Record factory converts a query into a list of records that are formatted correctly beforehand.
-    // Then this method must take that pre-formatted list of records and validate that none of them already exist.
+    // First, the Query generator sends queries to the Record generator which converts a create query into a list of
+    // records that are formatted correctly beforehand. Then this method must take that pre-formatted list of
+    // records and validate that none of them already exist.
     // any that do exist are removed from the list, the rest are appended to the end of the
     // correct database file type
     private void handleCreateRecord(Message message) {
         LOGGER.debug("FileManagerVerticle got request to create record");
         final JsonObject jsonMsg = JsonObject.mapFrom(message.body());
-        final String[] records = jsonMsg.getString("records").split("\n");
+        final IArrayList<Record> records = (IArrayList<Record>) jsonMsg.getValue("records");
         final String type = jsonMsg.getString("type");
         try {
             File db = new File("/etc/" + type);
@@ -90,11 +100,20 @@ public class FileManagerVerticle extends AbstractVerticle {
             } else {
                 LOGGER.debug("File already exists.");
             }
-            for (int i = 0; i < records.length; i++) {
-                if (!recordExists(records[i], type)) {
-                    bw.append(records[i]);
+            for (int i = 0; i < records.size(); i++) {
+                if (records.get(i) instanceof ReadRecord) {
+                    Message<Record> record = new Message<>(records.get(i));
+                    if (!recordExists(records.get(i), type)) {
+                        bw.append(records.get(i).getRecord());
+                    } else {
+                        LOGGER.debug("record: `" + records.get(i) + "` already exists in " + type + " database file");
+                    }
                 } else {
-                    LOGGER.debug("record: `" + records[i] + "` already exists in " + type + " database file");
+                    if (recordExists(records.get(i), type)) {
+                        bw.append(records.get(i).getRecord());
+                    } else {
+                        LOGGER.debug("record: `" + records.get(i) + "` doesn't exists in " + type + " database file");
+                    }
                 }
             }
             bw.close();
@@ -103,6 +122,8 @@ public class FileManagerVerticle extends AbstractVerticle {
             LOGGER.debug("An error occurred.");
             e.printStackTrace();
         }
+        // How to respond with failure through eventbus message.
+        message.fail(404, "failed to Create record, record already exists.");
     }
 
     // This method works like this:
@@ -110,6 +131,7 @@ public class FileManagerVerticle extends AbstractVerticle {
     // Then this method checks to make sure the records all exist, any that don't exist are taken off the list.
     // Then the remaining list is appended into the type file, and the reply message will contain the result and
     // include any warnings if debug mode is on.
+/*
     private void handleModifyRecord(Message message) {
         LOGGER.debug("FileManagerVerticle got request to modify record");
         final JsonObject jsonMsg = JsonObject.mapFrom(message.body());
@@ -140,11 +162,12 @@ public class FileManagerVerticle extends AbstractVerticle {
             e.printStackTrace();
         }
     }
-
+*/
     // This method works like this:
     // First the Query engine converts a query into a formatted list of delete records and sends them here.
     // Then this method checks to make sure the records all exist, any that don't exist are removed from the
     // list, then the reply message will notify of all records that didn't exist if debug mode is on.
+/*
     private void handleDeleteRecord(Message message) {
         LOGGER.debug("FileManagerVerticle got request to delete record");
         final JsonObject jsonMsg = JsonObject.mapFrom(message.body());
@@ -175,41 +198,17 @@ public class FileManagerVerticle extends AbstractVerticle {
             e.printStackTrace();
         }
     }
+*/
 
     // This method communicates with cacherVerticle to check the indexes of the database file for the record to
     // validate if it exists. If it doesn't exist, then this returns false.
-    private boolean recordExists(String record, String type) {
-        char[] text = record.toCharArray();
-        try (RandomAccessFile sc = new RandomAccessFile(type, "rw")) {
-            // Mapping the file with the memory
-            // Here the out is the object
-            // This command will help us enable the read and
-            // write functions
-            MappedByteBuffer out = sc.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, 10);
-            // Writing into memory mapped file
-            // taking it as 10 and printing it accordingly
-            for (int i = 0; i < text.length; i++) {
-                LOGGER.debug(String.valueOf((out.put((byte) text[i]))));
-            }
-            // Print the display message as soon
-            // as the memory is done writing
-            LOGGER.debug("Writing to Memory is complete");
-            // Reading from memory mapped files
-            // You can increase the size , it not be 10 , it
-            // can be higher or lower Depending on the size
-            // of the file
-            for (int i = 0; i < text.length; i++) {
-                LOGGER.debug(String.valueOf((char)out.get(i)));
-            }
-            // Display message on the console showcasing
-            // successful execution of the program
-            LOGGER.debug("Reading from Memory is complete");
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+    public void recordExists(Message message) {
+        Record record = (Record) message.body();
+        IArrayList<Record> records = readRecordsFromDatabase(record.getType(), record.getRecord());
+        if (records.contains(record)) {
+            message.reply(true);
         }
-        return false;
+        message.reply(false);
     }
 
 }

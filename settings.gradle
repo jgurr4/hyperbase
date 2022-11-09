@@ -1,2 +1,4 @@
 rootProject.name = 'Hyperbase'
-
+includeBuild '../observability-bridge'
+includeBuild '../immutable-collections'
+includeBuild '../jerbil'

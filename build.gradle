@@ -15,7 +15,7 @@ repositories {
 }
 
 dependencies {
-//    implementation "org.ple:immutable-collections"
+    implementation "org.ple:immutable-collections"
 //    implementation "org.ple:observability-bridge"
 //    implementation "org.ple:jerbil"
 //  implementation 'io.vertx:vertx-stack:4.3.2'
