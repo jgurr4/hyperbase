@@ -1,0 +1,12 @@
+Hyperbase features
+
+Visur features:
+ - Inspired by helix, tmux, warp and vim  (Check these programs out to get more ideas)
+
+Features inspired by helix:
+ - auto-complete : commands inside editor
+ - tutorial helper popup windows that show a list of possible commands
+ - file picker which shows you contents of files you are browsing, and is very fast.
+
+warp:
+ - 
